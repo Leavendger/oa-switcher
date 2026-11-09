@@ -979,7 +979,13 @@ const registry: Record<OaVendor, (cfg: AdapterContext['config']) => OaAdapter> =
 - `npm run package -- --pin-id`（或 `npm run build -- --pin-id`）通过 `OA_PIN_ID=1` 让
   `generate-manifest.mjs` 注入 `manifest.key`；`check-manifest` / `check-package` 用 `createPublicKey`
   （SPKI DER）校验并打印推导出的扩展 ID。
+- 固定 ID 包单独产出为 `release/oa-switcher-<version>-pinned-id/` 与同名 zip，不覆盖普通包；
+  `check:package` 会分别校验两种包，并断言固定 ID 包的 `manifest.key` 与仓库公钥一致。
+- `npm run install:local [-- --pin-id] [-- --target <dir>]` 把发行目录铺到固定安装目录：
+  只复制白名单文件并覆盖同名文件，不删除目标目录中的其它内容；不操作浏览器。
 - **默认关闭**：启用会使扩展 ID 变更一次，已加载 profile 的配置读不到；迁移方式为旧 ID 导出 → 新 ID 导入。
+- 启用后所有版本必须沿用同一把公钥，否则 ID 再次变化；私钥仅用于同 ID 的 crx/商店签名，
+  丢失不影响「加载已解压」读取数据，但无法再以同一 ID 签名发布。
 
 
 ### 9.2 质量门

@@ -25,8 +25,10 @@ Chrome / Edge（Chromium）扩展，用于在多个 OA 账号之间快速切换�
 
 **方式 A：下载 Release 附件（推荐给只想使用的用户）**
 
-1. 打开本仓库的 Releases 页面，下载 `oa-switcher-<version>.zip`。
-2. 解压得到一个包含 `manifest.json` 的文件夹（即 zip 的根层，不要再多套一层目录）。
+1. 打开本仓库的 Releases 页面，下载 `oa-switcher-<version>.zip`；如果以后会挪目录或多机同步，
+   改下 `oa-switcher-<version>-pinned-id.zip`（区别见「升级与数据保留」）。
+2. 解压得到一个包含 `manifest.json` 的文件夹（即 zip 的根层，不要再多套一层目录），
+   建议放到一个**以后不再改名、不再移动**的固定目录，升级时直接覆盖它。
 3. 打开 `chrome://extensions`（Edge 用 `edge://extensions`），开启右上角「开发者模式」。
 4. 点击「加载已解压的扩展程序」，选择上面那个**包含 `manifest.json` 的文件夹**（不是它的上级目录，也不是 zip 本身）。
 
@@ -36,9 +38,10 @@ Chrome / Edge（Chromium）扩展，用于在多个 OA 账号之间快速切换�
 npm ci
 npm run build          # 产物在 dist/
 npm run package        # 重新构建，产出 release/oa-switcher-<version>/ 目录 + 同名 zip 归档
+npm run package -- --pin-id   # 可选：另产出固定 ID 包 release/oa-switcher-<version>-pinned-id/
 ```
 
-然后按方式 A 的第 3–4 步加载 `release/oa-switcher-<version>/` 这一层目录。
+然后按方式 A 的第 3–4 步加载 `release/oa-switcher-<version>/`（或 `-pinned-id/`）这一层目录。
 
 **首次使用**：点开扩展 Popup → 设置主密码初始化保险库 → 在「设置」新增 OA 系统并点「授权域名」
 （浏览器会弹出域名授权确认）→ 打开该 OA 页面 → 在 Popup 选择账号并点「切换账号」。
@@ -60,38 +63,95 @@ npm run package        # 重新构建，产出 release/oa-switcher-<version>/ �
 `.crx` 需要签名私钥，且 Chrome 只允许从 Chrome Web Store 安装的 crx；本地/第三方来源的 crx 会被拦截
 （`CRX_REQUIRED_PROOF_MISSING` 等）。本扩展不经过商店，因此**不提供 crx 分发**，统一用「加载已解压」。
 
+## 升级与数据保留
+
+### 升级时不要「移除」旧版
+
+Chrome 卸载扩展时会同时删除该扩展的 `chrome.storage.local`，所以「移除旧版 → 加载新版」必然清空
+系统、账号、分组、设置和保险库密文。正确做法是始终加载**同一个目录**，升级时只替换目录里的文件，
+然后到 `chrome://extensions`（Edge 为 `edge://extensions`）点「重新加载」。
+
+推荐的固定安装路径（示例，可按需调整）：
+
+```text
+~/oa-switcher/extension
+```
+
+第一次把扩展加载到该目录后，后续升级都覆盖它即可。注意：未打包扩展的 ID 由加载目录的**绝对路径**
+推导，目录改名、移动或换机器都会得到新 ID，旧数据随之读不到。
+
+### 用脚本升级（可选）
+
+```bash
+npm ci
+npm run package                          # 产出普通包
+npm run install:local                    # 默认铺到 ~/oa-switcher/extension
+npm run install:local -- --target /path/to/your/extension
+npm run install:local -- --pin-id        # 铺固定 ID 包
+```
+
+脚本只覆盖发行包白名单内的扩展文件，**不会删除**目标目录中的其它文件；结束后按提示去扩展页点
+「重新加载」。脚本不会操作浏览器。
+
+### 升级前先导出备份
+
+在「设置 → 数据与迁移」导出**完整包**：
+
+- **能恢复**：OA 系统与适配配置、账号元数据、分组、偏好、悬浮球偏好与位置、保险库密文信封；
+  导入后可用**原主密码**恢复已保存的凭证。
+- **不能恢复**：主密码本身（忘记则密文无法解密）、浏览器 Cookie / 当前登录态、扩展被卸载后
+  没有导出过的历史数据。
+- 备份文件含凭证密文，请按机密文件保管；导入完成后建议删除导出的 JSON。
+
+### 固定扩展 ID：两种包怎么选
+
+每次打包会产出两种包（固定 ID 包需要仓库里已有 `keys/extension-public-key.pem`）：
+
+| 包 | 产物 | 扩展 ID | 适用 |
+|---|---|---|---|
+| 普通包（默认） | `oa-switcher-<version>.zip` | 由加载目录路径决定 | 普通使用、目录不挪动 |
+| 固定 ID 包 | `oa-switcher-<version>-pinned-id.zip` | 由 `manifest.key` 决定，跨目录/跨机器一致 | 以后会挪目录、多机同步同一份数据 |
+
+**建议默认仍选普通包**：切换成本为零，适合绝大多数人。只有确实需要「换目录或换机器后仍读到原数据」
+时，才选固定 ID 包；它需要一次迁移。
+
+从普通包切换到固定 ID 包（一次性）：
+
+1. 在旧版「设置 → 数据与迁移」导出完整包；
+2. 加载固定 ID 包（建议放到固定目录），确认扩展列表里出现新的 ID；
+3. 在新 ID 的「设置 → 数据与迁移」导入刚才的完整包，用原主密码解锁。
+
+**公钥约束**：`manifest.key` 一旦启用，之后所有版本都必须沿用 `keys/extension-public-key.pem`
+同一把公钥，否则扩展 ID 会再次变化，数据又读不到。公钥文件应随仓库长期保留。
+
+私钥保存在仓库外 `~/.oa-switcher/extension-private-key.pem`（权限 600，不参与「加载已解压」，
+不要提交或分发），只用于给同 ID 的 crx / 商店包签名：
+
+- **私钥丢失**：不影响「加载已解压」的固定 ID 与数据读取，但无法再以同一 ID 签名发布 crx / 上架；
+- **公钥文件丢失**：无法重建同一 ID，只能重新生成公钥并再次迁移数据。
+
+首次启用固定 ID：
+
+```bash
+npm run key:generate           # 仓库已有公钥时会拒绝覆盖
+npm run package -- --pin-id
+```
+
 ## 构建与打包
 
 ```bash
 npm ci
 npm run build          # 产物在 dist/
-npm run package        # 重新构建，产出 release/oa-switcher-<version>/ 目录 + 同名 zip 归档
-npm run check:package  # 校验目录与 zip 的文件白名单、manifest、图标与入口，并比对两者清单一致
+npm run package        # 重新构建，产出普通包：release/oa-switcher-<version>/ + 同名 zip
+npm run package -- --pin-id   # 另产出固定 ID 包：...-pinned-id/ + ...-pinned-id.zip
+npm run check:package  # 校验普通包与固定 ID 包的白名单、manifest、图标、入口与清单一致性
 ```
 
 交付目录与 zip 的根层只包含 `manifest.json`、`background.js`、`content.js`、`icons/`、`popup/`、
 `options/`、`assets/`；不含 source map、测试、`node_modules`、临时脚本、日志或 `.DS_Store`。
+两种包的区别、如何二选一与迁移步骤见上文「升级与数据保留」。
 
 更新扩展后，已打开的 OA 页面需要刷新一次，内容脚本才会使用新版本。
-
-### 固定扩展 ID（可选，默认关闭）
-
-未设置 `manifest.key` 时，未打包扩展的 ID 由**加载目录的绝对路径**推导：换机器或换目录后 ID 会变，
-`chrome.storage.local` 里的系统/账号配置读不到。需要跨机器、跨目录保持 ID 时：
-
-```bash
-npm run key:generate      # 生成一对 RSA 密钥
-npm run package -- --pin-id   # 构建时把公钥写入 manifest.key
-```
-
-- 公钥写入仓库内 `keys/extension-public-key.pem`；私钥写入**仓库外** `~/.oa-switcher/extension-private-key.pem`
-  （权限 600，不参与「加载已解压」，不要提交或分发）。本方案只需要公钥与私钥的配对关系，
-  私钥仅在未来签名/商店发布时才会用到。若仓库中已存在该公钥，`key:generate` 会拒绝覆盖，
-  直接执行 `npm run package -- --pin-id` 即可。
-- **默认不启用**：一旦启用，扩展 ID 会变更一次，现有 profile 的旧配置将读不到；请先在旧 ID 下
-  「设置 → 数据与迁移」导出，再用新 ID 加载后导入。
-- 长期固定 ID 时，`keys/extension-public-key.pem` 需要随仓库保留（它决定 ID）；私钥务必自行备份，
-  丢失后无法再以同一 ID 签名发布。
 
 ## 使用说明
 

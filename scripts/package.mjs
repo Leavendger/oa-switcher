@@ -8,13 +8,15 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const distDir = path.resolve(repoRoot, 'dist');
 const releaseDir = path.resolve(repoRoot, 'release');
 
+const pinId = process.argv.includes('--pin-id');
+
 const pkg = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
 const version = String(pkg.version);
-const releaseFolder = path.resolve(releaseDir, `oa-switcher-${version}`);
-const stagingDir = path.resolve(releaseDir, `.staging-${version}`);
-const zipPath = path.resolve(releaseDir, `oa-switcher-${version}.zip`);
-
-const pinId = process.argv.includes('--pin-id');
+// 两种包并排产出：普通包与固定 ID 包，避免同名互相覆盖。
+const variant = pinId ? '-pinned-id' : '';
+const releaseFolder = path.resolve(releaseDir, `oa-switcher-${version}${variant}`);
+const stagingDir = path.resolve(releaseDir, `.staging-${version}${variant}`);
+const zipPath = path.resolve(releaseDir, `oa-switcher-${version}${variant}.zip`);
 
 const INCLUDE = ['manifest.json', 'background.js', 'content.js', 'icons', 'popup', 'options', 'assets'];
 
@@ -100,8 +102,8 @@ async function main() {
   const zipSize = (await stat(zipPath)).size;
   const mode = pinId ? '已固定扩展 ID' : '未固定扩展 ID（默认）';
 
-  console.log(`[package] 交付目录：release/oa-switcher-${version}/（${relativeFiles.length} 个文件，${folderSize} bytes）`);
-  console.log(`[package] 归档 zip：release/oa-switcher-${version}.zip（${zipSize} bytes），包模式：${mode}`);
+  console.log(`[package] 交付目录：release/oa-switcher-${version}${variant}/（${relativeFiles.length} 个文件，${folderSize} bytes）`);
+  console.log(`[package] 归档 zip：release/oa-switcher-${version}${variant}.zip（${zipSize} bytes），包模式：${mode}`);
 }
 
 main().catch((error) => fail(error instanceof Error ? error.message : String(error)));
