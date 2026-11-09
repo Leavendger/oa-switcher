@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Injection Fixture</title>
+  </head>
+  <body>
+    <!--
+      仅用于验证动态注入与 content.ping：
+      页面刻意不包含任何 OA 厂商/蓝凌相关的类名、ID 或文案。
+    -->
+    <h1>Local Injection Fixture</h1>
+    <p id="hint">如果扩展已按当前 origin 注册脚本，打开控制台应能看到注入日志。</p>
+
+    <form id="generic-form" action="#">
+      <label for="field-a">Field A</label>
+      <input id="field-a" name="field-a" type="text" />
+      <label for="field-b">Field B</label>
+      <input id="field-b" name="field-b" type="text" />
+      <button id="submit-button" type="submit">Submit</button>
+    </form>
+
+    <ul id="generic-list">
+      <li>item-1</li>
+      <li>item-2</li>
+    </ul>
+  </body>
+</html>
