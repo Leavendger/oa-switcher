@@ -7,6 +7,7 @@ vi.mock('../../src/shared/messaging/client', () => ({
 }));
 
 import {
+  ballAbbreviation,
   clampBallPoint,
   mountFloatingBall,
   snapBallPoint,
@@ -92,6 +93,26 @@ function wireBackground(
 function cleanup(): void {
   document.getElementById(HOST_ID)?.remove();
 }
+
+describe('ballAbbreviation', () => {
+  it('优先取名称里的前两个汉字', () => {
+    expect(ballAbbreviation('苏州创元科创 OA（蓝凌）')).toBe('苏州');
+    expect(ballAbbreviation('示例公司 OA（蓝凌）')).toBe('示例');
+  });
+
+  it('只有一个汉字时直接使用该字', () => {
+    expect(ballAbbreviation('云')).toBe('云');
+  });
+
+  it('不含汉字时取前三个字母数字并转大写', () => {
+    expect(ballAbbreviation('Slack')).toBe('SLA');
+    expect(ballAbbreviation('oa-2')).toBe('OA2');
+  });
+
+  it('没有可用字符时回退到 OA', () => {
+    expect(ballAbbreviation('  （）  ')).toBe('OA');
+  });
+});
 
 describe('snapBallPoint', () => {
   const viewport = { width: 800, height: 600 };
@@ -211,7 +232,12 @@ describe('mountFloatingBall', () => {
     expect(shadow!.textContent).toContain('user01');
     expect(shadow!.textContent).toContain('user01');
     expect(shadow!.textContent?.toLowerCase()).not.toContain('password');
-    expect(shadow!.querySelector('.ball')?.getAttribute('aria-label')).toBe('OA 账号切换');
+    expect(shadow!.querySelector('.ball-name')?.textContent).toBe('示例');
+    expect(shadow!.querySelector('.ball-mark')).toBeNull();
+    expect(shadow!.querySelector('.ball')?.getAttribute('aria-label')).toBe(
+      '示例公司 OA（蓝凌）：切换账号',
+    );
+    expect(shadow!.querySelector('.label')).toBeNull();
   });
 
   it('恢复保存的位置，并限制在视口内', async () => {
@@ -225,9 +251,9 @@ describe('mountFloatingBall', () => {
 
     await mountFloatingBall();
 
-    const dock = document.getElementById(HOST_ID)?.shadowRoot?.querySelector<HTMLElement>('.dock');
-    expect(dock?.style.left).toBe('8px');
-    expect(dock?.style.top).toBe('8px');
+    const ball = document.getElementById(HOST_ID)?.shadowRoot?.querySelector<HTMLElement>('.ball');
+    expect(ball?.style.left).toBe('8px');
+    expect(ball?.style.top).toBe('8px');
   });
 
   it('点击展开面板，Esc 收起（不依赖焦点在球内），关闭态不拦截 Esc', async () => {
@@ -254,27 +280,27 @@ describe('mountFloatingBall', () => {
     expect(ball.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('关闭按钮只收起账号列表，小球与系统名保留', async () => {
+  it('关闭按钮只收起账号列表，小球与球内缩写保留', async () => {
     wireBackground();
     await mountFloatingBall();
 
     const shadow = document.getElementById(HOST_ID)!.shadowRoot!;
     const ball = shadow.querySelector<HTMLButtonElement>('.ball')!;
-    const label = shadow.querySelector<HTMLButtonElement>('.label')!;
+    const ballName = shadow.querySelector<HTMLElement>('.ball-name')!;
     const panel = shadow.querySelector<HTMLElement>('.panel')!;
     const dismiss = shadow.querySelector<HTMLButtonElement>('.dismiss')!;
 
-    expect(label.hidden).toBe(false);
-    expect(label.textContent).toBe('示例公司 OA（蓝凌）');
+    expect(ballName.textContent).toBe('示例');
+    expect(ball.title).toBe('示例公司 OA（蓝凌）（点击展开账号列表）');
     expect(dismiss.getAttribute('aria-label')).toBe('关闭账号列表');
 
     ball.click();
     expect(panel.hidden).toBe(false);
-    expect(label.hidden).toBe(true);
+    expect(ballName.textContent).toBe('示例');
 
     dismiss.click();
     expect(panel.hidden).toBe(true);
-    expect(label.hidden).toBe(false);
+    expect(ballName.textContent).toBe('示例');
     expect(document.getElementById(HOST_ID)).not.toBeNull();
     expect(mockedCall).not.toHaveBeenCalledWith('ui.dismissFloat', expect.anything());
 

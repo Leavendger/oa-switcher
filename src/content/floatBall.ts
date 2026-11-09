@@ -41,6 +41,23 @@ export function clampBallPoint(
   };
 }
 
+/**
+ * 收起态球内缩写（球只有 44px，放不下全名）：
+ * - 含两个及以上汉字时取前两个汉字，例如「苏州创元科创 OA（蓝凌）」→「苏州」
+ * - 只有一个汉字时直接使用该字
+ * - 不含汉字时取前三个字母/数字并转大写，例如「Slack」→「SLA」
+ * - 都没有时回退到「OA」，避免出现空球
+ */
+export function ballAbbreviation(name: string): string {
+  const text = name.trim();
+  const han = [...text].filter((char) => /[\u4e00-\u9fff]/.test(char));
+  if (han.length >= 2) return han.slice(0, 2).join('');
+  if (han.length === 1) return han[0] as string;
+
+  const latin = text.replace(/[^A-Za-z0-9]/g, '').slice(0, 3);
+  return latin ? latin.toUpperCase() : 'OA';
+}
+
 /** 拖动结束时的贴边吸附：只判定左右两侧，不改变纵向位置。 */
 export function snapBallPoint(
   point: FloatPoint,
@@ -62,28 +79,21 @@ const STYLES = `
   :host { all: initial; }
   .wrap { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
-  .dock { position: fixed; width: 44px; height: 44px; pointer-events: none; }
-  .ball, .panel, .label { pointer-events: auto; box-sizing: border-box; }
+  .ball, .panel { pointer-events: auto; box-sizing: border-box; }
   .ball {
-    position: absolute; inset: 0; width: 44px; height: 44px; border-radius: 50%;
+    position: fixed; width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.25); cursor: grab;
-    background: #1f6feb; color: #fff; font-size: 13px; font-weight: 600;
+    background: #1f6feb; color: #fff;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 6px 18px rgba(0,0,0,0.28); touch-action: none; user-select: none;
     padding: 0; line-height: 1; font-family: inherit;
+    transition: background-color 120ms ease;
   }
+  .ball:hover { background: #1a62d6; }
+  .ball:active { background: #0b4fbe; }
   .ball:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .ball[aria-expanded="true"] { background: #0b4fbe; }
-  .label {
-    position: absolute; top: 50%; left: calc(100% + 6px); transform: translateY(-50%);
-    max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(0,0,0,0.12);
-    background: #fff; color: #111827; font-size: 11px; line-height: 1.2; cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.18); font-family: inherit;
-  }
-  .dock.flip .label { left: auto; right: calc(100% + 6px); }
-  .label[hidden] { display: none; }
-  .label:focus-visible { outline: 2px solid #1f6feb; outline-offset: 2px; }
+  .ball-name { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
   .panel {
     position: fixed; width: 300px; max-height: 70vh; overflow: auto;
     background: #ffffff; color: #111827; border-radius: 10px;
@@ -169,10 +179,9 @@ export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
   shadow.innerHTML = `
     <style>${STYLES}</style>
     <div class="wrap">
-      <div class="dock">
-        <button class="ball" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="OA 账号切换"></button>
-        <button class="label" type="button" aria-label="展开账号列表"></button>
-      </div>
+      <button class="ball" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="OA 账号切换">
+        <span class="ball-name" aria-hidden="true"></span>
+      </button>
       <section class="panel" role="dialog" aria-label="OA 账号切换面板" hidden>
         <header class="panel-head">
           <div>
@@ -204,9 +213,8 @@ export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
     return element;
   };
 
-  const dock = query<HTMLElement>('.dock');
   const ball = query<HTMLButtonElement>('.ball');
-  const label = query<HTMLButtonElement>('.label');
+  const ballName = query<HTMLElement>('.ball-name');
   const panel = query<HTMLElement>('.panel');
   const panelTitle = query<HTMLElement>('.panel-title');
   const panelSub = query<HTMLElement>('.panel-sub');
@@ -238,18 +246,16 @@ export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
     moved: boolean;
   } | null = null;
 
-  ball.textContent = 'OA';
-  ball.title = `OA 账号切换：${system.name}`;
-  label.textContent = system.name;
-  label.title = `${system.name}（点击展开账号列表）`;
+  // 球内只放缩写；全名通过 title、aria-label 和展开态面板标题保留
+  ballName.textContent = ballAbbreviation(system.name);
+  ball.title = `${system.name}（点击展开账号列表）`;
+  ball.setAttribute('aria-label', `${system.name}：切换账号`);
   panelTitle.textContent = system.name;
   panelSub.textContent = '仅显示该系统的账号';
 
   const applyPosition = () => {
-    dock.style.left = `${point.x}px`;
-    dock.style.top = `${point.y}px`;
-    // 靠近右半屏时把系统名放到球的左侧，避免标签超出视口
-    dock.classList.toggle('flip', point.x + BALL_SIZE / 2 > window.innerWidth / 2);
+    ball.style.left = `${point.x}px`;
+    ball.style.top = `${point.y}px`;
   };
 
   const positionPanel = () => {
@@ -342,8 +348,6 @@ export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
   const setOpen = (next: boolean) => {
     open = next;
     panel.hidden = !next;
-    // 紧凑态显示系统名；展开态由面板标题承载，隐藏标签避免重复
-    label.hidden = next;
     ball.setAttribute('aria-expanded', String(next));
     if (next) {
       positionPanel();
@@ -494,7 +498,6 @@ export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
   ball.addEventListener('pointercancel', (event) => void endDrag(event));
 
   dismissButton.addEventListener('click', () => closePanel());
-  label.addEventListener('click', () => setOpen(true));
   switchButton.addEventListener('click', () => void startSwitch());
   cancelButton.addEventListener('click', async () => {
     if (!snapshot?.runId) return;

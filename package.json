@@ -1,6 +1,6 @@
 {
   "name": "oa-switcher",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "OA 多账号一键切换的浏览器扩展 · Chrome MV3",
   "license": "MIT",
