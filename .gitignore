@@ -10,3 +10,5 @@ coverage/
 .screenshots/
 *.zip
 .env*
+docs/phase-1-plan.md
+docs/blog/

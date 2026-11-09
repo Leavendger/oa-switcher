@@ -108,7 +108,7 @@ OA Switcher/
 ├── docs/
 │   ├── architecture.md              # 本文件：架构、协议、数据、安全、Adapter 契约
 │   ├── testing.md                   # 测试矩阵、异常审查结论与实测结果（阶段五）
-│   └── phase-1-plan.md              # 阶段一实施计划与验收口径
+│   └── development-summary.md       # 实现演进、关键取舍与真实排障记录
 ├── src/
 │   ├── manifest.ts                  # （可选）manifest 的 TS 类型辅助/生成器被 scripts 复用时的桥接说明
 │   ├── shared/                      # 唯一跨模块契约层，任何模块都可 import
