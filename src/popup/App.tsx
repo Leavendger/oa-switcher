@@ -10,6 +10,7 @@ import { Toast } from '../ui/Toast';
 import { applyTheme } from '../ui/theme';
 import { useBootstrap } from '../ui/useBootstrap';
 import { AccountList } from './components/AccountList';
+import { FloatBallSettings } from './components/FloatBallSettings';
 import { FlowStatus } from './components/FlowStatus';
 import { OtherSystemsPanel } from './components/OtherSystemsPanel';
 import { SwitchButton } from './components/SwitchButton';
@@ -91,6 +92,12 @@ export function App() {
   const showAccounts = !showPicker && !showUnrecognized && activeSystem !== null;
 
   const originSystems = resolution?.originSystems ?? [];
+  // 只有当前页面确属已配置系统时，才提供「在当前站点隐藏」这类站点级开关
+  const tabOrigin = resolution?.origin ?? null;
+  const siteOrigin =
+    tabOrigin !== null && systems.some((item) => item.origins.includes(tabOrigin))
+      ? tabOrigin
+      : null;
   const systemAtOrigin = activeSystemId
     ? originSystems.find((candidate) => candidate.systemId === activeSystemId)
     : undefined;
@@ -335,6 +342,8 @@ export function App() {
         ) : null}
         {pingMessage ? <p className="mt-1 text-[11px] text-danger">{pingMessage}</p> : null}
       </div>
+
+      <FloatBallSettings siteOrigin={siteOrigin} />
 
       <FlowStatus
         snapshot={snapshot}

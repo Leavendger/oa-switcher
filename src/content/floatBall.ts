@@ -1,4 +1,5 @@
 import { describeError, errorText } from '../errors/messages.zh-CN';
+import { FLOAT_STORAGE_KEYS } from '../shared/constants';
 import { log } from '../shared/log';
 import { callBackground, connectFlowPort } from '../shared/messaging/client';
 import type { Account } from '../shared/types/account';
@@ -17,6 +18,8 @@ const BALL_SIZE = 44;
 const MARGIN = 8;
 const PANEL_WIDTH = 300;
 const DRAG_THRESHOLD = 4;
+/** 距视口左右边缘不足该距离时，松手吸附贴边。只做水平方向。 */
+const SNAP_THRESHOLD = 24;
 
 export interface BallViewport {
   width: number;
@@ -38,13 +41,31 @@ export function clampBallPoint(
   };
 }
 
+/** 拖动结束时的贴边吸附：只判定左右两侧，不改变纵向位置。 */
+export function snapBallPoint(
+  point: FloatPoint,
+  viewport: BallViewport,
+  size = BALL_SIZE,
+  margin = MARGIN,
+  threshold = SNAP_THRESHOLD,
+): FloatPoint {
+  const clamped = clampBallPoint(point, viewport, size, margin);
+  const gapToRight = viewport.width - (clamped.x + size);
+  if (clamped.x <= margin + threshold) return { x: margin, y: clamped.y };
+  if (gapToRight <= margin + threshold) {
+    return { x: Math.max(margin, viewport.width - size - margin), y: clamped.y };
+  }
+  return clamped;
+}
+
 const STYLES = `
   :host { all: initial; }
   .wrap { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
-  .ball, .panel { pointer-events: auto; box-sizing: border-box; }
+  .dock { position: fixed; width: 44px; height: 44px; pointer-events: none; }
+  .ball, .panel, .label { pointer-events: auto; box-sizing: border-box; }
   .ball {
-    position: fixed; width: 44px; height: 44px; border-radius: 50%;
+    position: absolute; inset: 0; width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.25); cursor: grab;
     background: #1f6feb; color: #fff; font-size: 13px; font-weight: 600;
     display: flex; align-items: center; justify-content: center;
@@ -53,6 +74,16 @@ const STYLES = `
   }
   .ball:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .ball[aria-expanded="true"] { background: #0b4fbe; }
+  .label {
+    position: absolute; top: 50%; left: calc(100% + 6px); transform: translateY(-50%);
+    max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(0,0,0,0.12);
+    background: #fff; color: #111827; font-size: 11px; line-height: 1.2; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18); font-family: inherit;
+  }
+  .dock.flip .label { left: auto; right: calc(100% + 6px); }
+  .label[hidden] { display: none; }
+  .label:focus-visible { outline: 2px solid #1f6feb; outline-offset: 2px; }
   .panel {
     position: fixed; width: 300px; max-height: 70vh; overflow: auto;
     background: #ffffff; color: #111827; border-radius: 10px;
@@ -89,12 +120,17 @@ const STYLES = `
   .flow-actions button[hidden] { display: none; }
 `;
 
+/** 悬浮球实例句柄：由 startFloatingBall 在开关变化时调用，彻底移除 DOM 与监听。 */
+export interface FloatBallHandle {
+  unmount: () => void;
+}
+
 /**
  * 仅当「当前页面确实属于某个已配置并启用的系统」时渲染悬浮球。
  * 任何不满足条件的分支都直接返回，不创建容器节点，避免页面留下空 div。
  */
-export async function mountFloatingBall(): Promise<void> {
-  if (document.getElementById(HOST_ID)) return;
+export async function mountFloatingBall(): Promise<FloatBallHandle | null> {
+  if (document.getElementById(HOST_ID)) return null;
 
   const origin = location.origin;
 
@@ -102,23 +138,23 @@ export async function mountFloatingBall(): Promise<void> {
   try {
     prefs = await callBackground('ui.getFloatPrefs', {});
   } catch {
-    return;
+    return null;
   }
-  if (!prefs.enabled) return;
-  if (prefs.dismissed[origin]) return;
+  if (!prefs.enabled) return null;
+  if (prefs.dismissed[origin]) return null;
 
   let system: OASystem | null = null;
   try {
     const resolution = await callBackground('system.resolveForUrl', { url: location.href });
-    if (resolution.status !== 'matched' || !resolution.systemId) return;
+    if (resolution.status !== 'matched' || !resolution.systemId) return null;
     const systems = await callBackground('system.list', {});
     system = systems.find((item) => item.id === resolution.systemId) ?? null;
   } catch {
-    return;
+    return null;
   }
-  if (!system || !system.enabled) return;
+  if (!system || !system.enabled) return null;
   // 脚本能运行说明通常已授权；这里只排除明确记录的 denied，避免旧数据（缺 originPermissions）被误判
-  if (system.originPermissions?.[origin] === 'denied') return;
+  if (system.originPermissions?.[origin] === 'denied') return null;
 
   const saved = prefs.positions[origin];
   let point = clampBallPoint(
@@ -133,14 +169,17 @@ export async function mountFloatingBall(): Promise<void> {
   shadow.innerHTML = `
     <style>${STYLES}</style>
     <div class="wrap">
-      <button class="ball" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="OA 账号切换"></button>
+      <div class="dock">
+        <button class="ball" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="OA 账号切换"></button>
+        <button class="label" type="button" aria-label="展开账号列表"></button>
+      </div>
       <section class="panel" role="dialog" aria-label="OA 账号切换面板" hidden>
         <header class="panel-head">
           <div>
             <p class="panel-title"></p>
             <p class="panel-sub"></p>
           </div>
-          <button class="dismiss" type="button" title="关闭悬浮球（本站不再显示）" aria-label="关闭悬浮球，本站不再显示">×</button>
+          <button class="dismiss" type="button" title="关闭账号列表" aria-label="关闭账号列表">×</button>
         </header>
         <div class="accounts"></div>
         <p class="notice" hidden></p>
@@ -165,7 +204,9 @@ export async function mountFloatingBall(): Promise<void> {
     return element;
   };
 
+  const dock = query<HTMLElement>('.dock');
   const ball = query<HTMLButtonElement>('.ball');
+  const label = query<HTMLButtonElement>('.label');
   const panel = query<HTMLElement>('.panel');
   const panelTitle = query<HTMLElement>('.panel-title');
   const panelSub = query<HTMLElement>('.panel-sub');
@@ -199,12 +240,16 @@ export async function mountFloatingBall(): Promise<void> {
 
   ball.textContent = 'OA';
   ball.title = `OA 账号切换：${system.name}`;
+  label.textContent = system.name;
+  label.title = `${system.name}（点击展开账号列表）`;
   panelTitle.textContent = system.name;
   panelSub.textContent = '仅显示该系统的账号';
 
   const applyPosition = () => {
-    ball.style.left = `${point.x}px`;
-    ball.style.top = `${point.y}px`;
+    dock.style.left = `${point.x}px`;
+    dock.style.top = `${point.y}px`;
+    // 靠近右半屏时把系统名放到球的左侧，避免标签超出视口
+    dock.classList.toggle('flip', point.x + BALL_SIZE / 2 > window.innerWidth / 2);
   };
 
   const positionPanel = () => {
@@ -297,13 +342,17 @@ export async function mountFloatingBall(): Promise<void> {
   const setOpen = (next: boolean) => {
     open = next;
     panel.hidden = !next;
+    // 紧凑态显示系统名；展开态由面板标题承载，隐藏标签避免重复
+    label.hidden = next;
     ball.setAttribute('aria-expanded', String(next));
     if (next) {
       positionPanel();
       document.addEventListener('keydown', onKeyDown, true);
+      document.addEventListener('pointerdown', onOutsidePointerDown, true);
       void refresh();
     } else {
       document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
     }
   };
 
@@ -350,16 +399,17 @@ export async function mountFloatingBall(): Promise<void> {
     }
   };
 
-  const dismiss = async () => {
-    try {
-      await callBackground('ui.dismissFloat', { origin });
-    } catch (error) {
-      log.error('float-ball-dismiss-failed', error);
-    }
-    host.remove();
-    disconnect();
-    window.removeEventListener('resize', onResize);
-    document.removeEventListener('keydown', onKeyDown, true);
+  /** 叉叉只收起账号列表，回到紧凑态；小球是否显示由 Popup 设置里的开关决定。 */
+  const closePanel = () => {
+    setOpen(false);
+    ball.focus();
+  };
+
+  const onOutsidePointerDown = (event: PointerEvent) => {
+    if (!open) return;
+    // Shadow DOM 内的交互会被重定向到 host，用 composedPath 判断是否点在球或面板上
+    if (event.composedPath().includes(host)) return;
+    setOpen(false);
   };
 
   const onResize = () => {
@@ -429,6 +479,9 @@ export async function mountFloatingBall(): Promise<void> {
     setTimeout(() => {
       suppressClick = false;
     }, 0);
+    // 吸附只在松手时判定，拖动过程中不做任何吸附，避免抖动
+    point = snapBallPoint(point, { width: window.innerWidth, height: window.innerHeight });
+    applyPosition();
     if (open) positionPanel();
     try {
       await callBackground('ui.saveFloatPosition', { origin, point });
@@ -440,7 +493,8 @@ export async function mountFloatingBall(): Promise<void> {
   ball.addEventListener('pointerup', (event) => void endDrag(event));
   ball.addEventListener('pointercancel', (event) => void endDrag(event));
 
-  dismissButton.addEventListener('click', () => void dismiss());
+  dismissButton.addEventListener('click', () => closePanel());
+  label.addEventListener('click', () => setOpen(true));
   switchButton.addEventListener('click', () => void startSwitch());
   cancelButton.addEventListener('click', async () => {
     if (!snapshot?.runId) return;
@@ -475,4 +529,65 @@ export async function mountFloatingBall(): Promise<void> {
   renderAccounts();
   renderSwitch();
   await refresh();
+
+  return {
+    unmount: () => {
+      host.remove();
+      disconnect();
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
+    },
+  };
+}
+
+/**
+ * 常驻的悬浮球管理器：负责首次挂载，并监听悬浮球偏好变更。
+ * Popup 里的全局开关、站点级隐藏/恢复都写同一组存储键，内容脚本据此即时挂载或移除，
+ * 不需要刷新页面。
+ */
+export function startFloatingBall(): void {
+  let handle: FloatBallHandle | null = null;
+  let syncing = false;
+  let wanted = true;
+
+  const sync = async () => {
+    if (syncing) return;
+    syncing = true;
+    try {
+      if (!wanted) {
+        handle?.unmount();
+        handle = null;
+        return;
+      }
+      if (!handle) handle = await mountFloatingBall();
+    } catch (error) {
+      log.error('float-ball-mount-failed', error);
+    } finally {
+      syncing = false;
+      if (!wanted && handle) {
+        handle.unmount();
+        handle = null;
+      }
+    }
+  };
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    if (FLOAT_STORAGE_KEYS.enabled in changes) {
+      wanted = changes[FLOAT_STORAGE_KEYS.enabled]?.newValue !== false;
+      void sync();
+    }
+
+    const dismissed = changes[FLOAT_STORAGE_KEYS.dismissed];
+    if (!dismissed) return;
+    const raw = dismissed.newValue;
+    const dismissedNow =
+      typeof raw === 'object' && raw !== null && (raw as Record<string, unknown>)[location.origin] === true;
+    wanted = !dismissedNow;
+    void sync();
+  });
+
+  void sync();
 }

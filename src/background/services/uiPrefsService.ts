@@ -61,6 +61,23 @@ export async function dismissFloatSite(origin: string): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.floatDismissed]: next });
 }
 
+/** 恢复某个站点的悬浮球（从「已关闭的站点」移除）。 */
+export async function restoreFloatSite(origin: string): Promise<void> {
+  const stored = (await chrome.storage.local.get([STORAGE_KEYS.floatDismissed])) as Record<
+    string,
+    unknown
+  >;
+  const next = readDismissed(stored[STORAGE_KEYS.floatDismissed]);
+  if (!(origin in next)) return;
+  delete next[origin];
+  await chrome.storage.local.set({ [STORAGE_KEYS.floatDismissed]: next });
+}
+
+/** 全局开关：内容脚本监听同一键，写入后当前页即时生效。 */
+export async function setFloatEnabled(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.floatEnabled]: enabled });
+}
+
 export async function saveFloatPosition(origin: string, point: FloatPoint): Promise<void> {
   const stored = (await chrome.storage.local.get([STORAGE_KEYS.floatPositions])) as Record<
     string,

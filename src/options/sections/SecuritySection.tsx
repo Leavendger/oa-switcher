@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { describeError } from '../../errors/messages.zh-CN';
 import { callBackground } from '../../shared/messaging/client';
 import type { PopupGrouping, Settings, ThemePreference, VaultState } from '../../shared/types/settings';
-import { STORAGE_KEYS } from '../../storage/keys';
 import { Button } from '../../ui/Button';
 import { Field, inputClass } from '../../ui/Field';
 import { applyTheme } from '../../ui/theme';
@@ -24,54 +23,6 @@ export function SecuritySection({ settings, vaultState, reload }: SecuritySectio
   const [currentMaster, setCurrentMaster] = useState('');
   const [nextMaster, setNextMaster] = useState('');
   const [nextConfirm, setNextConfirm] = useState('');
-  const [floatEnabled, setFloatEnabled] = useState(true);
-  const [dismissedSites, setDismissedSites] = useState<string[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-
-    const load = async () => {
-      const stored = (await chrome.storage.local.get([
-        STORAGE_KEYS.floatEnabled,
-        STORAGE_KEYS.floatDismissed,
-      ])) as Record<string, unknown>;
-      if (!alive) return;
-      setFloatEnabled(stored[STORAGE_KEYS.floatEnabled] !== false);
-      const raw = stored[STORAGE_KEYS.floatDismissed];
-      setDismissedSites(
-        raw && typeof raw === 'object'
-          ? Object.keys(raw).filter((origin) => (raw as Record<string, unknown>)[origin] === true)
-          : [],
-      );
-    };
-
-    void load();
-    const onChanged = (_changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'local') void load();
-    };
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => {
-      alive = false;
-      chrome.storage.onChanged.removeListener(onChanged);
-    };
-  }, []);
-
-  const toggleFloat = async (next: boolean) => {
-    setFloatEnabled(next);
-    await chrome.storage.local.set({ [STORAGE_KEYS.floatEnabled]: next });
-  };
-
-  const restoreSite = async (origin: string) => {
-    const stored = (await chrome.storage.local.get([STORAGE_KEYS.floatDismissed])) as Record<
-      string,
-      unknown
-    >;
-    const raw = stored[STORAGE_KEYS.floatDismissed];
-    const next =
-      raw && typeof raw === 'object' ? { ...(raw as Record<string, unknown>) } : {};
-    delete next[origin];
-    await chrome.storage.local.set({ [STORAGE_KEYS.floatDismissed]: next });
-  };
 
   useEffect(() => {
     setDraft(settings);
@@ -359,39 +310,6 @@ export function SecuritySection({ settings, vaultState, reload }: SecuritySectio
             </Button>
             {message ? <span className="text-[12px] text-muted">{message}</span> : null}
           </div>
-        </div>
-      </div>
-
-      <div className="card p-3">
-        <h2 className="text-[14px] font-semibold">页面悬浮球</h2>
-        <p className="mt-1 text-[11px] text-muted">
-          仅在识别为已配置系统的 OA 页面显示，可拖动并记忆位置；面板只展示账号标签与用户名，不渲染任何凭证。
-        </p>
-
-        <label className="mt-2 flex items-center gap-2 text-[12px]">
-          <input
-            type="checkbox"
-            checked={floatEnabled}
-            onChange={(event) => void toggleFloat(event.target.checked)}
-          />
-          在 OA 页面显示悬浮球
-        </label>
-
-        <div className="mt-2">
-          <p className="text-[12px] font-medium">已关闭的站点</p>
-          {dismissedSites.length === 0 ? (
-            <p className="mt-1 text-[11px] text-muted">没有被关闭的站点。</p>
-          ) : (
-            <ul className="mt-1 flex flex-col gap-1">
-              {dismissedSites.map((origin) => (
-                <li key={origin} className="flex items-center justify-between gap-2">
-                  <span className="code text-[11px]">{origin}</span>
-                  <Button onClick={() => void restoreSite(origin)}>恢复显示</Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-1 text-[10px] text-muted">恢复后需重新加载对应 OA 页面才会出现悬浮球。</p>
         </div>
       </div>
 

@@ -6,7 +6,13 @@ vi.mock('../../src/shared/messaging/client', () => ({
   connectFlowPort: vi.fn(() => () => undefined),
 }));
 
-import { clampBallPoint, mountFloatingBall } from '../../src/content/floatBall';
+import {
+  clampBallPoint,
+  mountFloatingBall,
+  snapBallPoint,
+  startFloatingBall,
+} from '../../src/content/floatBall';
+import { FLOAT_STORAGE_KEYS } from '../../src/shared/constants';
 import { callBackground } from '../../src/shared/messaging/client';
 import type { OASystem } from '../../src/shared/types/system';
 import { installChromeMock } from '../helpers/chromeMock';
@@ -86,6 +92,27 @@ function wireBackground(
 function cleanup(): void {
   document.getElementById(HOST_ID)?.remove();
 }
+
+describe('snapBallPoint', () => {
+  const viewport = { width: 800, height: 600 };
+
+  it('距左边缘 32px 以内吸附到左边距', () => {
+    expect(snapBallPoint({ x: 30, y: 200 }, viewport)).toEqual({ x: 8, y: 200 });
+    expect(snapBallPoint({ x: 8, y: 200 }, viewport)).toEqual({ x: 8, y: 200 });
+  });
+
+  it('距右边缘 32px 以内吸附到右边距', () => {
+    expect(snapBallPoint({ x: 800 - 44 - 20, y: 200 }, viewport)).toEqual({ x: 800 - 44 - 8, y: 200 });
+  });
+
+  it('中间区域保持原位，不改变纵向坐标', () => {
+    expect(snapBallPoint({ x: 400, y: 123 }, viewport)).toEqual({ x: 400, y: 123 });
+  });
+
+  it('越界坐标先夹取再判断吸附', () => {
+    expect(snapBallPoint({ x: -50, y: -50 }, viewport)).toEqual({ x: 8, y: 8 });
+  });
+});
 
 describe('clampBallPoint', () => {
   it('把越界坐标收回视口内', () => {
@@ -198,9 +225,9 @@ describe('mountFloatingBall', () => {
 
     await mountFloatingBall();
 
-    const ball = document.getElementById(HOST_ID)?.shadowRoot?.querySelector<HTMLElement>('.ball');
-    expect(ball?.style.left).toBe('8px');
-    expect(ball?.style.top).toBe('8px');
+    const dock = document.getElementById(HOST_ID)?.shadowRoot?.querySelector<HTMLElement>('.dock');
+    expect(dock?.style.left).toBe('8px');
+    expect(dock?.style.top).toBe('8px');
   });
 
   it('点击展开面板，Esc 收起（不依赖焦点在球内），关闭态不拦截 Esc', async () => {
@@ -227,14 +254,79 @@ describe('mountFloatingBall', () => {
     expect(ball.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('关闭按钮按 origin 记忆并移除容器', async () => {
+  it('关闭按钮只收起账号列表，小球与系统名保留', async () => {
     wireBackground();
     await mountFloatingBall();
 
     const shadow = document.getElementById(HOST_ID)!.shadowRoot!;
-    shadow.querySelector<HTMLButtonElement>('.dismiss')!.click();
+    const ball = shadow.querySelector<HTMLButtonElement>('.ball')!;
+    const label = shadow.querySelector<HTMLButtonElement>('.label')!;
+    const panel = shadow.querySelector<HTMLElement>('.panel')!;
+    const dismiss = shadow.querySelector<HTMLButtonElement>('.dismiss')!;
+
+    expect(label.hidden).toBe(false);
+    expect(label.textContent).toBe('示例公司 OA（蓝凌）');
+    expect(dismiss.getAttribute('aria-label')).toBe('关闭账号列表');
+
+    ball.click();
+    expect(panel.hidden).toBe(false);
+    expect(label.hidden).toBe(true);
+
+    dismiss.click();
+    expect(panel.hidden).toBe(true);
+    expect(label.hidden).toBe(false);
+    expect(document.getElementById(HOST_ID)).not.toBeNull();
+    expect(mockedCall).not.toHaveBeenCalledWith('ui.dismissFloat', expect.anything());
+
+    ball.click();
+    expect(panel.hidden).toBe(false);
+  });
+
+  it('点外部区域收起面板，小球保留', async () => {
+    wireBackground();
+    await mountFloatingBall();
+
+    const shadow = document.getElementById(HOST_ID)!.shadowRoot!;
+    const ball = shadow.querySelector<HTMLButtonElement>('.ball')!;
+    const panel = shadow.querySelector<HTMLElement>('.panel')!;
+
+    ball.click();
+    expect(panel.hidden).toBe(false);
+
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true, composed: true }));
+    expect(panel.hidden).toBe(true);
+    expect(document.getElementById(HOST_ID)).not.toBeNull();
+  });
+
+  it('开关变化时即时挂载与移除，无需刷新页面', async () => {
+    const chromeMock = installChromeMock();
+    wireBackground();
+
+    startFloatingBall();
+    await vi.waitFor(() => expect(document.getElementById(HOST_ID)).not.toBeNull());
+
+    chromeMock.emitStorageChange({ [FLOAT_STORAGE_KEYS.enabled]: { newValue: false } });
     await vi.waitFor(() => expect(document.getElementById(HOST_ID)).toBeNull());
 
-    expect(mockedCall).toHaveBeenCalledWith('ui.dismissFloat', { origin: ORIGIN });
+    chromeMock.emitStorageChange({ [FLOAT_STORAGE_KEYS.enabled]: { newValue: true } });
+    await vi.waitFor(() => expect(document.getElementById(HOST_ID)).not.toBeNull());
+  });
+
+  it('站点级隐藏与恢复同样即时生效', async () => {
+    const chromeMock = installChromeMock();
+    wireBackground();
+
+    startFloatingBall();
+    await vi.waitFor(() => expect(document.getElementById(HOST_ID)).not.toBeNull());
+
+    chromeMock.emitStorageChange({
+      [FLOAT_STORAGE_KEYS.dismissed]: { newValue: { [ORIGIN]: true } },
+    });
+    await vi.waitFor(() => expect(document.getElementById(HOST_ID)).toBeNull());
+
+    chromeMock.emitStorageChange({
+      [FLOAT_STORAGE_KEYS.dismissed]: { newValue: {} },
+    });
+    await vi.waitFor(() => expect(document.getElementById(HOST_ID)).not.toBeNull());
   });
 });

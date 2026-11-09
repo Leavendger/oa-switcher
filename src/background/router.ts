@@ -17,7 +17,9 @@ import {
   dismissFloatSite,
   normalizeFloatOrigin,
   readFloatPrefs,
+  restoreFloatSite,
   saveFloatPosition,
+  setFloatEnabled,
 } from './services/uiPrefsService';
 import { vaultService } from './services/vaultService';
 import { notifyVaultState } from './services/vaultNotifier';
@@ -51,11 +53,22 @@ export const routes: RouteTable = {
   'system.discover': ({ url, vendor }) => discoverSystem({ url, vendor }),
   'system.selfCheck': ({ systemId }) => selfCheckSystem(systemId),
   'ui.getFloatPrefs': () => readFloatPrefs(),
+  'ui.setFloatEnabled': async ({ enabled }) => {
+    if (typeof enabled !== 'boolean') throw new FlowError('E_VALIDATION', { field: 'enabled' });
+    await setFloatEnabled(enabled);
+    return { saved: true as const };
+  },
   'ui.dismissFloat': async ({ origin }) => {
     const normalized = normalizeFloatOrigin(origin);
     if (!normalized) throw new FlowError('E_VALIDATION', { field: 'origin' });
     await dismissFloatSite(normalized);
     return { dismissed: true as const };
+  },
+  'ui.restoreFloatSite': async ({ origin }) => {
+    const normalized = normalizeFloatOrigin(origin);
+    if (!normalized) throw new FlowError('E_VALIDATION', { field: 'origin' });
+    await restoreFloatSite(normalized);
+    return { restored: true as const };
   },
   'ui.saveFloatPosition': async ({ origin, point }) => {
     const normalized = normalizeFloatOrigin(origin);

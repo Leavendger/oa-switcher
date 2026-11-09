@@ -75,7 +75,9 @@ export interface RequestPayloadMap {
   'data.preview': { content: string; sourceMasterPassword?: string };
   'data.import': TransferImportOptions;
   'ui.getFloatPrefs': EmptyPayload;
+  'ui.setFloatEnabled': { enabled: boolean };
   'ui.dismissFloat': { origin: string };
+  'ui.restoreFloatSite': { origin: string };
   'ui.saveFloatPosition': { origin: string; point: { x: number; y: number } };
   'content.ready': { url: string; title: string; frame: 'top' | 'sub' };
   'content.ping': { runId?: RunId };
@@ -151,7 +153,9 @@ export interface ResponseDataMap {
   'data.preview': TransferPreview;
   'data.import': TransferImportResult;
   'ui.getFloatPrefs': FloatPrefs;
+  'ui.setFloatEnabled': { saved: true };
   'ui.dismissFloat': { dismissed: true };
+  'ui.restoreFloatSite': { restored: true };
   'ui.saveFloatPosition': { saved: true };
   'content.ready': { received: true };
   'content.ping': ContentPingData;
@@ -200,7 +204,9 @@ export const REQUEST_TYPES = [
   'data.preview',
   'data.import',
   'ui.getFloatPrefs',
+  'ui.setFloatEnabled',
   'ui.dismissFloat',
+  'ui.restoreFloatSite',
   'ui.saveFloatPosition',
   'content.ready',
   'content.ping',

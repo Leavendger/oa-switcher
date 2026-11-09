@@ -1,6 +1,6 @@
 import { log } from '../shared/log';
 import { handleContentRequest } from './bridge';
-import { mountFloatingBall } from './floatBall';
+import { startFloatingBall } from './floatBall';
 import { isTopFrame } from './guards';
 import { reportReady } from './readyReporter';
 
@@ -28,10 +28,8 @@ function install(): void {
   reportReady();
 
   if (isTopFrame()) {
-    // 只在识别为已配置系统的页面渲染；不满足条件时模块内部直接返回、不创建节点
-    void mountFloatingBall().catch((error: unknown) => {
-      log.error('float-ball-mount-failed', error);
-    });
+    // 只在识别为已配置系统的页面渲染；开关或站点级隐藏变化时由管理器即时挂载/移除
+    startFloatingBall();
   }
 
   log.info('content-ready', { frame: isTopFrame() ? 'top' : 'sub' });

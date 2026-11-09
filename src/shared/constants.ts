@@ -1,6 +1,22 @@
-/** 全局常量：端口名、消息上限、默认超时。storage key 定义在 src/storage/keys.ts。 */
+/**
+ * 全局常量：端口名、消息上限、默认超时。
+ * storage key 定义在 src/storage/keys.ts；悬浮球键因内容脚本需要监听变更而放在这里共用。
+ */
 
 export const EXTENSION_NAME = 'OA Switcher';
+
+export const STORAGE_PREFIX = 'oa.v1.';
+
+/**
+ * 悬浮球偏好键。
+ * 内容脚本不能依赖 storage 层（分层约束），但需要监听这三个键的变更以即时响应开关，
+ * 因此与 src/storage/keys.ts 共用同一份定义，避免字符串 key 出现两份。
+ */
+export const FLOAT_STORAGE_KEYS = {
+  enabled: `${STORAGE_PREFIX}float.enabled`,
+  dismissed: `${STORAGE_PREFIX}float.dismissed`,
+  positions: `${STORAGE_PREFIX}float.positions`,
+} as const;
 
 export const PORT_NAME = 'oa-switcher:flow';
 

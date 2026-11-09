@@ -4,6 +4,11 @@ export interface ChromeMock {
   local: Record<string, unknown>;
   session: Record<string, unknown>;
   reset: () => void;
+  /** 手动触发 storage.onChanged，供内容脚本监听逻辑测试。 */
+  emitStorageChange: (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    area?: 'local' | 'session',
+  ) => void;
 }
 
 type StorageGetKeys = string | string[] | Record<string, unknown> | null | undefined;
@@ -45,10 +50,24 @@ function createArea(store: Record<string, unknown>) {
 export function installChromeMock(): ChromeMock {
   const local: Record<string, unknown> = {};
   const session: Record<string, unknown> = {};
+  type ChangeListener = (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    area: string,
+  ) => void;
+  const listeners = new Set<ChangeListener>();
+
   const chromeMock = {
     storage: {
       local: createArea(local),
       session: createArea(session),
+      onChanged: {
+        addListener(listener: ChangeListener): void {
+          listeners.add(listener);
+        },
+        removeListener(listener: ChangeListener): void {
+          listeners.delete(listener);
+        },
+      },
     },
     scripting: {
       async getRegisteredContentScripts(): Promise<unknown[]> {
@@ -93,6 +112,10 @@ export function installChromeMock(): ChromeMock {
     reset() {
       clearStore(local);
       clearStore(session);
+      listeners.clear();
+    },
+    emitStorageChange(changes, area = 'local') {
+      for (const listener of listeners) listener(changes, area);
     },
   };
 }
