@@ -107,6 +107,31 @@ describe('FlowRunner', () => {
     await waitForTerminal(runner);
   });
 
+  it('登录态 unknown 时把检查过但未命中的信号写进错误 detail', async () => {
+    const services = makeServices({
+      resolve: vi.fn(async (_input, runId) => {
+        const target = makeTarget(runId);
+        target.system.adapterConfig = { authenticatedUrlPattern: 'https://oa.example.com/sys/*' };
+        return target;
+      }),
+      detectLoginState: vi.fn(async () => ({ state: 'unknown' as const, evidence: [] })),
+    });
+    const runner = new FlowRunner({ services });
+
+    await runner.start({ accountId: ACCOUNT_ID });
+    const snapshot = await waitForTerminal(runner);
+
+    expect(snapshot.state).toBe('failed');
+    expect(snapshot.error).toMatchObject({
+      code: 'E_STATE_UNKNOWN',
+      detail: {
+        step: 'probe',
+        reason: 'no-signal-matched',
+        missing: 'authenticatedUrlPattern',
+      },
+    });
+  });
+
   it('已登录路径按顺序退出、等待登录页、填写、提交、验证成功', async () => {
     const order: string[] = [];
     let passwordAtFill: string | null = null;

@@ -510,7 +510,7 @@
 | 提交方式 / 元素 | `click` + `input[name="btn_submit"]` | 1 | 1 |
 | 未登录标记 | `input[name="j_username"]` | 1 | 1 |
 | 已登录标记 | `div.lui_single_menu_header_logout .lui_dropdown_toggle` | 1（登录后） | 1（登录后） |
-| 登录成功 URL 规则 | `{origin}/sys/portal/page.jsp*` | ✓（落点） | ✓（落点） |
+| 登录成功 URL 规则 | `{origin}/sys/*` | ✓（`/sys/` 下各页面） | ✓（`/sys/` 下各页面） |
 | 登录失败提示 | `.lui_login_message_div.tip_message` | 1（失败后） | 1（失败后） |
 | 退出方式 / 入口 | `click` + 同上退出容器 | ✓（同一 `__sys_logout()`） | ✓（同一 `__sys_logout()`） |
 | 退出二次确认 | `div.lui_dialog_main .lui_widget_btn.lui_toolbar_btn_def` | 1（弹窗内） | 1（弹窗内） |

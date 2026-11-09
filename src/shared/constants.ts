@@ -10,6 +10,11 @@ export const UI_KEEPALIVE_PORT = 'oa-switcher:ui';
 /** 流程端口断线后的重连延迟（SW 回收后端口会断开，需要重连并重拉状态）。 */
 export const PORT_RECONNECT_DELAY_MS = 500;
 
+/** 蓝凌厂商预设标识与版本：Background 的旧配置迁移和自检都需要读取。 */
+export const LANDRAY_PRESET_ID = 'landray';
+/** 2026-11-09.1：登录成功规则从门户页 `/sys/portal/page.jsp*` 放宽到 `/sys/*`。 */
+export const LANDRAY_PRESET_VERSION = '2026-11-09.1';
+
 export const MAX_MESSAGE_BYTES = 32 * 1024;
 
 export const MAX_ID_LENGTH = 64;

@@ -12,6 +12,8 @@ import {
 } from '../../shared/types/flow';
 import type { RunId } from '../../shared/types/ids';
 import { newRunId } from '../../shared/types/ids';
+import type { LoginStateReport } from '../../shared/types/messages';
+import type { OASystem } from '../../shared/types/system';
 import { startKeepalive, stopKeepalive } from '../keepalive';
 import { assertTransition } from './machine';
 import { snapshotStore } from './snapshotStore';
@@ -31,6 +33,36 @@ export interface FlowRunnerOptions {
 }
 
 const CANCEL_TIMEOUT_MS = 3_000;
+
+const LOGIN_STATE_SIGNAL_KEYS = [
+  'loggedInMarkerSelector',
+  'loggedOutMarkerSelector',
+  'loginPageUrlPattern',
+  'authenticatedUrlPattern',
+] as const;
+
+/**
+ * unknown 时报出「检查过但没命中的信号」：远程支持时用户只需复述 missing，
+ * 就能判断是标记失效、URL 规则不匹配还是两项都没配。
+ */
+function stateUnknownError(
+  system: OASystem,
+  evidence: LoginStateReport['evidence'],
+): FlowError {
+  if (evidence.some((item) => item.kind === 'conflict')) {
+    return new FlowError('E_STATE_UNKNOWN', { step: 'probe', reason: 'conflicting-evidence' });
+  }
+  const config = system.adapterConfig ?? {};
+  const checked = LOGIN_STATE_SIGNAL_KEYS.filter((key) => {
+    const value = config[key];
+    return typeof value === 'string' && value.trim().length > 0;
+  });
+  return new FlowError('E_STATE_UNKNOWN', {
+    step: 'probe',
+    reason: 'no-signal-matched',
+    ...(checked.length > 0 ? { missing: checked.join(',') } : {}),
+  });
+}
 
 export class FlowRunner {
   private active: FlowStateSnapshot | null = null;
@@ -170,7 +202,7 @@ export class FlowRunner {
       if (!this.isRunnable(runId)) return;
 
       if (login.state === 'unknown') {
-        await this.fail(runId, 'STATE_UNKNOWN', new FlowError('E_STATE_UNKNOWN', { step: 'probe' }));
+        await this.fail(runId, 'STATE_UNKNOWN', stateUnknownError(target.system, login.evidence));
         return;
       }
 

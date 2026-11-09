@@ -160,7 +160,7 @@ npm run package -- --pin-id   # 构建时把公钥写入 manifest.key
 | 用户名输入框 | `usernameFieldSelector` | 用户名输入框选择器 |
 | 密码输入框 | `passwordFieldSelector` | 密码输入框选择器 |
 | 提交方式 | `submitTrigger` | `{ kind: 'formSubmit' \| 'click', selector }` |
-| 退出方式 | `logoutTrigger` | `{ kind: 'url', url }` 或 `{ kind: 'click', selector, confirmSelector? }` |
+| 退出方式 | `logoutTrigger` | `{ kind: 'url', url }` 或 `{ kind: 'click', selector, confirmSelector? }`；点击入口在该页面不存在时，蓝凌适配器会兜底访问同源 `/logout.jsp` |
 
 ### 状态与验证相关
 
@@ -168,7 +168,7 @@ npm run package -- --pin-id   # 构建时把公钥写入 manifest.key
 |---|---|---|
 | 已登录标记 | `loggedInMarkerSelector` | 状态判定缺少证据，可能返回 `E_STATE_UNKNOWN` |
 | 未登录标记 | `loggedOutMarkerSelector` | 退出后只能靠 URL 规则确认 |
-| 登录成功 URL 规则 | `authenticatedUrlPattern` | 成功检测只能依赖已登录标记 |
+| 登录成功 URL 规则 | `authenticatedUrlPattern` | 与「已登录标记」同等有效，两者都缺时会返回 `E_STATE_UNKNOWN` |
 | 登录失败提示 | `loginFailureMarkerSelector` | 密码错误只能等验证超时 |
 | 退出后 URL 规则 | `loggedOutUrlPattern` | 退出确认依赖未登录标记 |
 | 验证码标记 | `captchaMarkerSelector` | 检测到验证码时中止（`E_BLOCKED_CAPTCHA`）；未配置则只能超时 |
@@ -181,8 +181,10 @@ npm run package -- --pin-id   # 构建时把公钥写入 manifest.key
 ### 超时
 
 默认单步超时：校验 10s、探测 12s、退出 30s、等待登录页 20s、填写 12s、提交 10s、验证 30s，
-流程总截止 90s。可用系统配置中的 `timeouts` 覆盖适配器侧超时（`stateProbeMs`、`logoutTriggerMs`、
-`logoutConfirmMs`、`loginPageWaitMs`、`fillMs`、`submitMs`、`verifyMs`、`pollMs`），流程级单步上限仍受上述值约束。
+流程总截止 90s。系统配置中的 `timeouts`（`stateProbeMs`、`logoutTriggerMs`、`logoutConfirmMs`、
+`loginPageWaitMs`、`fillMs`、`submitMs`、`verifyMs`、`pollMs`）会在运行时传给适配器；
+非正数或超过 120s 的值会被忽略并回落到默认值，流程级单步上限仍受上述值约束。
+设置页暂未提供超时编辑入口，预设已给出默认值。
 
 ### 厂商预设（蓝凌）
 

@@ -58,7 +58,10 @@ export function FlowStatus({ snapshot, onRetry, onCancel, cancelling }: FlowStat
 
       {snapshot.error ? (
         <div className="mt-1">
-          <p className="text-[11px] text-danger">{errorText(snapshot.error.code)}</p>
+          <p className="text-[11px] text-danger">
+            {errorText(snapshot.error.code)}
+            <span className="code ml-1 text-[10px] text-muted">{snapshot.error.code}</span>
+          </p>
           {failureDetail ? (
             <p className="code text-[10px] text-muted">{failureDetail}</p>
           ) : null}

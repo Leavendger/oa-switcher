@@ -1,7 +1,9 @@
 import { PORT_NAME, UI_KEEPALIVE_PORT, VAULT_AUTOLOCK_ALARM } from '../shared/constants';
 import { log } from '../shared/log';
 import { dispatchRequest, isExtensionSender } from '../shared/messaging/server';
+import { migrateLegacyLandrayPreset } from './services/presetMigration';
 import { ensureSchema } from '../storage/migrations';
+import { readSystems, writeSystems } from '../storage/repo';
 import { reconcileContentScripts } from './contentRegistry';
 import { flowRunner } from './flow/runner';
 import { snapshotStore } from './flow/snapshotStore';
@@ -21,11 +23,22 @@ async function ensureVaultAlarm(): Promise<void> {
   }
 }
 
+/** 0.1.0 的蓝凌预设只认门户页；升级后把未被手改的旧值迁移到 /sys/*。 */
+async function migratePresetConfigs(): Promise<void> {
+  const systems = await readSystems();
+  const migrated = systems.map((system) => migrateLegacyLandrayPreset(system) ?? system);
+  const changed = migrated.filter((system, index) => system !== systems[index]).length;
+  if (changed === 0) return;
+  await writeSystems(migrated);
+  log.info('preset-migrated', { count: changed });
+}
+
 async function initialize(): Promise<void> {
   if (initialized) return;
   initialized = true;
   try {
     await ensureSchema();
+    await migratePresetConfigs();
     await applyDebugFlag();
     await flowRunner.restore();
     // SW 冷启动后保险库只可能是 uninitialized / locked；密钥不落盘，天然重锁

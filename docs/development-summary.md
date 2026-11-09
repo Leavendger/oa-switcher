@@ -529,14 +529,14 @@ export const LANDRAY_PRESET_TEMPLATE: Record<DiscoveryFieldKey, string> = {
   submitSelector: 'input[name="btn_submit"]',
   loggedOutMarkerSelector: 'input[name="j_username"]',
   loggedInMarkerSelector: 'div.lui_single_menu_header_logout .lui_dropdown_toggle',
-  authenticatedUrlPattern: '{origin}/sys/portal/page.jsp*',
+  authenticatedUrlPattern: '{origin}/sys/*',
   loginFailureMarkerSelector: '.lui_login_message_div.tip_message',
   logoutKind: 'click',
   logoutUrl: '',
   logoutSelector: 'div.lui_single_menu_header_logout .lui_dropdown_toggle',
   logoutConfirmSelector: 'div.lui_dialog_main .lui_widget_btn.lui_toolbar_btn_def',
   loggedOutUrlPattern: '{origin}/login.jsp*',
-  urlSignatures: '{origin}/sys/portal/*',
+  urlSignatures: '{origin}/sys/*',
 };
 ```
 

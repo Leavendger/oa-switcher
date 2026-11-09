@@ -9,6 +9,7 @@ import {
   PRESET_ORIGIN_PLACEHOLDER,
 } from '../../src/adapters/landray/preset';
 import { LANDRAY_REQUIRED_KEYS } from '../../src/adapters/landray/config';
+import { matchesUrlPattern } from '../../src/shared/urlMatch';
 
 const ORIGIN = 'http://oa.example.com';
 
@@ -76,6 +77,19 @@ describe('蓝凌厂商预设', () => {
   it('URL 签名基于 {origin} 的站点路径，而不是完整登录地址', () => {
     const { urlSignatures } = buildLandrayPresetConfig(ORIGIN);
 
-    expect(urlSignatures).toEqual([`${ORIGIN}/sys/portal/*`]);
+    expect(urlSignatures).toEqual([`${ORIGIN}/sys/*`]);
+  });
+
+  it('登录成功规则覆盖门户之外的 /sys/ 页面，且不会命中登录页', () => {
+    const { config } = buildLandrayPresetConfig(ORIGIN);
+    const pattern = config.authenticatedUrlPattern;
+
+    expect(pattern).toBe(`${ORIGIN}/sys/*`);
+    expect(matchesUrlPattern(pattern, `${ORIGIN}/sys/portal/page.jsp`)).toBe(true);
+    expect(
+      matchesUrlPattern(pattern, `${ORIGIN}/sys/profile/index.jsp#system/systemview`),
+    ).toBe(true);
+    expect(matchesUrlPattern(pattern, `${ORIGIN}/login.jsp`)).toBe(false);
+    expect(matchesUrlPattern(pattern, `${ORIGIN}/login.jsp;jsessionid=abc`)).toBe(false);
   });
 });

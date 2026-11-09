@@ -1,6 +1,9 @@
 import type { DiscoveryFieldKey } from '../../shared/types/discovery';
 import type { AdapterTimeouts } from '../../shared/types/system';
+import { LANDRAY_PRESET_ID, LANDRAY_PRESET_VERSION } from '../../shared/constants';
 import type { LandrayAdapterConfig } from './config';
+
+export { LANDRAY_PRESET_ID, LANDRAY_PRESET_VERSION };
 
 /**
  * 蓝凌厂商预设。
@@ -16,9 +19,6 @@ import type { LandrayAdapterConfig } from './config';
  *   可通过「自检」验证命中数量、并随站点版本变化被判定为「可能已过期」。
  */
 
-export const LANDRAY_PRESET_ID = 'landray';
-/** 交叉校验日期：改动本文件时必须重新在两环境验证并更新该版本号。 */
-export const LANDRAY_PRESET_VERSION = '2026-11-09';
 export const PRESET_ORIGIN_PLACEHOLDER = '{origin}';
 
 /** 预设覆盖的字段（顺序与 UI 展示一致）。退出地址不参与：本预设固定采用 click 方式。 */
@@ -53,14 +53,14 @@ export const LANDRAY_PRESET_TEMPLATE: Record<DiscoveryFieldKey, string> = {
   submitSelector: 'input[name="btn_submit"]',
   loggedOutMarkerSelector: 'input[name="j_username"]',
   loggedInMarkerSelector: 'div.lui_single_menu_header_logout .lui_dropdown_toggle',
-  authenticatedUrlPattern: '{origin}/sys/portal/page.jsp*',
+  authenticatedUrlPattern: '{origin}/sys/*',
   loginFailureMarkerSelector: '.lui_login_message_div.tip_message',
   logoutKind: 'click',
   logoutUrl: '',
   logoutSelector: 'div.lui_single_menu_header_logout .lui_dropdown_toggle',
   logoutConfirmSelector: 'div.lui_dialog_main .lui_widget_btn.lui_toolbar_btn_def',
   loggedOutUrlPattern: '{origin}/login.jsp*',
-  urlSignatures: '{origin}/sys/portal/*',
+  urlSignatures: '{origin}/sys/*',
 };
 
 /** 每个字段的交叉校验证据（两个环境的命中数量），用于「识别依据」与文档。 */
@@ -73,13 +73,13 @@ export const LANDRAY_PRESET_EVIDENCE: Partial<Record<DiscoveryFieldKey, string>>
   submitSelector: '两环境登录页均命中 1 个（input name=btn_submit）',
   loggedOutMarkerSelector: '两环境登录页均命中 1 个（复用用户名输入框）',
   loggedInMarkerSelector: '两环境登录后均命中 1 个（退出图标容器）',
-  authenticatedUrlPattern: '两环境登录后落点均为 /sys/portal/page.jsp',
+  authenticatedUrlPattern: '两环境登录后均处于 /sys/ 下（门户、个人资料等页面都算已登录）',
   loginFailureMarkerSelector: '两环境用不存在的账号登录后均命中 1 个「用户名或密码不正确」提示',
   logoutKind: '两环境退出均通过同一 JS 函数弹出确认框',
   logoutSelector: '两环境登录后均命中 1 个（退出图标容器）',
   logoutConfirmSelector: '两环境点击退出后确认框内「确定」按钮均命中 1 个',
   loggedOutUrlPattern: '两环境确认退出后均回到 /login.jsp',
-  urlSignatures: '两环境登录后落点都在 /sys/portal/ 下',
+  urlSignatures: '两环境登录后的页面都位于 /sys/ 下',
 };
 
 const PRESET_TIMEOUTS: Partial<AdapterTimeouts> = {

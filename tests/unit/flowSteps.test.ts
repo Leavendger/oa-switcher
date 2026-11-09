@@ -217,4 +217,25 @@ describe('flow steps 页面跳转容错', () => {
     mockSendMessage(navigationLost);
     await expectCode(createFlowServices().waitForLoginPage(target, 400), 'E_LOGIN_PAGE_TIMEOUT');
   });
+
+  it('detectLoginState 把 adapterConfig.timeouts 透传给 Content（非法值丢弃）', async () => {
+    const sent: Array<{ payload: Record<string, unknown> }> = [];
+    mockSendMessage((message) => {
+      if (message.type === 'content.ping') return pingOk(message);
+      sent.push(message as unknown as { payload: Record<string, unknown> });
+      return responseOk(message, { state: 'loggedOut', evidence: [] });
+    });
+
+    const targetWithTimeouts: FlowTarget = {
+      ...target,
+      system: systemFixture({
+        adapterConfig: {
+          timeouts: { stateProbeMs: 9_000, pollMs: 250, submitMs: -1, bogus: 'x' },
+        },
+      }),
+    };
+
+    await createFlowServices().detectLoginState(targetWithTimeouts, 1_200);
+    expect(sent[0]?.payload.timeouts).toEqual({ stateProbeMs: 9_000, pollMs: 250 });
+  });
 });

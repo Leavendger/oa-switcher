@@ -66,11 +66,13 @@ export class LandrayAdapter implements OaAdapter {
     const hasStateSignal =
       isNonEmptyString(this.config.loggedInMarkerSelector) ||
       isNonEmptyString(this.config.loggedOutMarkerSelector) ||
-      isNonEmptyString(this.config.loginPageUrlPattern);
+      isNonEmptyString(this.config.loginPageUrlPattern) ||
+      isNonEmptyString(this.config.authenticatedUrlPattern);
     if (!hasStateSignal) {
       throw new FlowError('E_CONFIG_MISSING', {
         field: 'adapterConfig',
-        missing: 'loggedInMarkerSelector,loggedOutMarkerSelector,loginPageUrlPattern',
+        missing:
+          'loggedInMarkerSelector,loggedOutMarkerSelector,loginPageUrlPattern,authenticatedUrlPattern',
       });
     }
 
@@ -110,6 +112,14 @@ export class LandrayAdapter implements OaAdapter {
   async logout(context: AdapterContext): Promise<void> {
     const trigger = this.requireLogoutTrigger();
 
+    // 蓝凌的非门户页（如 /sys/profile/）不渲染顶部退出入口，这些页面统一提供 GET /logout.jsp。
+    // 只在点击目标确实找不到时兜底：能正常点到的站点行为完全不变。
+    if (trigger.kind === 'click' && !context.driver.query(trigger.selector)) {
+      await this.logoutViaFallback(context);
+      await this.waitForLogoutEvidence(context);
+      return;
+    }
+
     try {
       if (trigger.kind === 'url') {
         await context.driver.navigate(trigger.url, { signal: context.signal });
@@ -130,12 +140,23 @@ export class LandrayAdapter implements OaAdapter {
       }
     } catch (error) {
       if (isFlowError(error) && (error.code === 'E_TIMEOUT' || error.code === 'E_FORM_NOT_FOUND')) {
+        if (trigger.kind === 'click') {
+          await this.logoutViaFallback(context);
+          await this.waitForLogoutEvidence(context);
+          return;
+        }
         throw new FlowError('E_LOGOUT_TRIGGER_FAILED', { step: 'logout' });
       }
       throw error;
     }
 
     await this.waitForLogoutEvidence(context);
+  }
+
+  /** 站内兜底登出地址：蓝凌在站点根提供 /logout.jsp（GET 后跳转登录页）。 */
+  private async logoutViaFallback(context: AdapterContext): Promise<void> {
+    const origin = new URL(context.driver.url()).origin;
+    await context.driver.navigate(`${origin}/logout.jsp`, { signal: context.signal });
   }
 
   async waitForLoginPage(context: AdapterContext): Promise<void> {
@@ -284,6 +305,17 @@ export class LandrayAdapter implements OaAdapter {
     if (isNonEmptyString(loggedInSelector) && context.driver.query(loggedInSelector)) {
       loggedIn = true;
       evidence.push({ kind: 'loggedInMarker', detail: { selector: loggedInSelector } });
+    }
+
+    // 登录成功 URL 规则与「已登录标记」同权：标记依赖具体页面结构，
+    // URL 规则依赖站点路径；两者任一命中都足以证明已登录，避免门户改版后误判。
+    const authenticatedPattern = this.config.authenticatedUrlPattern;
+    if (
+      isNonEmptyString(authenticatedPattern) &&
+      matchesUrlPattern(authenticatedPattern, context.driver.url())
+    ) {
+      loggedIn = true;
+      evidence.push({ kind: 'authenticatedUrl', detail: { pattern: authenticatedPattern } });
     }
 
     const loggedOutSelector = this.config.loggedOutMarkerSelector;

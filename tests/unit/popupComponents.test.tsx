@@ -65,11 +65,10 @@ describe('SwitchButton', () => {
 });
 
 describe('FlowStatus', () => {
-  it.each(RENDERED_CODES)('%s 渲染中文文案且不出现错误码原文', (code) => {
+  it.each(RENDERED_CODES)('%s 渲染中文文案并附带错误码便于远程排查', (code) => {
     const html = renderToStaticMarkup(<FlowStatus snapshot={failedSnapshot(code)} />);
     expect(html).toContain(errorText(code));
-    expect(html).not.toContain(code);
-    expect(html).not.toContain('E_');
+    expect(html).toContain(code);
   });
 
   it('失败态传入 onRetry 时渲染重试按钮', () => {

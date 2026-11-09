@@ -8,7 +8,7 @@ import type {
   LoginVerification,
   OaRequestBase,
 } from '../../shared/types/messages';
-import type { OASystem } from '../../shared/types/system';
+import type { AdapterTimeouts, OASystem } from '../../shared/types/system';
 import { readAccounts, readSettings, readSystems } from '../../storage/repo';
 import { cancelOaRun, resolveOaTab, sendOaCommand } from '../contentMessenger';
 import { vaultService } from '../services/vaultService';
@@ -73,12 +73,40 @@ async function retryOnContentUnavailable<T>(
   }
 }
 
+const ADAPTER_TIMEOUT_KEYS: readonly (keyof AdapterTimeouts)[] = [
+  'stateProbeMs',
+  'logoutTriggerMs',
+  'logoutConfirmMs',
+  'loginPageWaitMs',
+  'fillMs',
+  'submitMs',
+  'verifyMs',
+  'pollMs',
+];
+
+/** 只接受正数且不超过 120s 的值；非法值忽略，回落到适配器默认超时。 */
+function readAdapterTimeouts(config: Record<string, unknown>): Partial<AdapterTimeouts> {
+  const raw = config.timeouts;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const result: Partial<AdapterTimeouts> = {};
+  for (const key of ADAPTER_TIMEOUT_KEYS) {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 120_000) {
+      result[key] = Math.floor(value);
+    }
+  }
+  return result;
+}
+
 function requestBase(target: FlowTarget): OaRequestBase {
+  const timeouts = readAdapterTimeouts(target.system.adapterConfig);
   return {
     runId: target.runId,
     systemId: target.system.id,
     vendor: target.system.vendor,
     adapterConfig: target.system.adapterConfig,
+    ...(Object.keys(timeouts).length > 0 ? { timeouts } : {}),
   };
 }
 

@@ -13,6 +13,8 @@ class FakeDriver implements PageDriver {
   readonly values: { selector: string; value: string }[] = [];
   readonly submits: string[] = [];
   readonly navigations: string[] = [];
+  /** navigate 后模拟服务端重定向（例如 /logout.jsp → /login.jsp）。 */
+  readonly redirects = new Map<string, string>();
   readonly failSetValueFor = new Set<string>();
   onSleep: (() => void) | null = null;
   sleepCount = 0;
@@ -85,7 +87,7 @@ class FakeDriver implements PageDriver {
 
   async navigate(url: string): Promise<void> {
     this.navigations.push(url);
-    this.currentUrl = url;
+    this.currentUrl = this.redirects.get(url) ?? url;
   }
 
   async sleep(): Promise<void> {
@@ -159,7 +161,7 @@ describe('detectLoginPage', () => {
 
 describe('detectLoginState', () => {
   it('已登录标记命中返回 loggedIn', async () => {
-    const driver = new FakeDriver('https://oa.example.com/home', ['#logged-in']);
+    const driver = new FakeDriver('https://oa.example.com/inbox', ['#logged-in']);
     const adapter = new LandrayAdapter(BASE_CONFIG);
     const report = await adapter.detectLoginState(makeContext(driver, BASE_CONFIG));
     expect(report.state).toBe('loggedIn');
@@ -168,8 +170,19 @@ describe('detectLoginState', () => {
     ]);
   });
 
+  it('登录成功 URL 规则命中即视为 loggedIn，不再要求已登录标记存在', async () => {
+    const config = { authenticatedUrlPattern: 'https://oa.example.com/sys/*' };
+    const driver = new FakeDriver('https://oa.example.com/sys/profile/index.jsp#system/systemview');
+    const adapter = new LandrayAdapter(config);
+    const report = await adapter.detectLoginState(makeContext(driver, config));
+    expect(report.state).toBe('loggedIn');
+    expect(report.evidence).toEqual([
+      { kind: 'authenticatedUrl', detail: { pattern: config.authenticatedUrlPattern } },
+    ]);
+  });
+
   it('未登录标记命中返回 loggedOut', async () => {
-    const driver = new FakeDriver('https://oa.example.com/home', ['#logged-out']);
+    const driver = new FakeDriver('https://oa.example.com/inbox', ['#logged-out']);
     const adapter = new LandrayAdapter(BASE_CONFIG);
     const report = await adapter.detectLoginState(makeContext(driver, BASE_CONFIG));
     expect(report.state).toBe('loggedOut');
@@ -204,7 +217,8 @@ describe('detectLoginState', () => {
       code: 'E_CONFIG_MISSING',
       detail: {
         field: 'adapterConfig',
-        missing: 'loggedInMarkerSelector,loggedOutMarkerSelector,loginPageUrlPattern',
+        missing:
+          'loggedInMarkerSelector,loggedOutMarkerSelector,loginPageUrlPattern,authenticatedUrlPattern',
       },
     });
     expect(driver.sleepCount).toBe(0);
@@ -220,6 +234,18 @@ describe('detectLoginState', () => {
     const report = await adapter.detectLoginState(makeContext(driver, config, { stateProbeMs: 0 }));
     expect(report.state).toBe('unknown');
     expect(report.evidence).toEqual([]);
+  });
+
+  it('URL 规则同时命中登录页时仍返回 unknown，绝不误触发退出', async () => {
+    const config = {
+      loginPageUrlPattern: 'https://oa.example.com/sys/*',
+      authenticatedUrlPattern: 'https://oa.example.com/sys/*',
+    };
+    const driver = new FakeDriver('https://oa.example.com/sys/profile/index.jsp');
+    const adapter = new LandrayAdapter(config);
+    const report = await adapter.detectLoginState(makeContext(driver, config));
+    expect(report.state).toBe('unknown');
+    expect(report.evidence.some((item) => item.kind === 'conflict')).toBe(true);
   });
 });
 
@@ -284,12 +310,19 @@ describe('logout', () => {
     });
   });
 
-  it('退出入口等待超时映射为 E_LOGOUT_TRIGGER_FAILED', async () => {
-    const config = { logoutTrigger: { kind: 'click', selector: '#logout' } };
+  it('页面没有退出入口时兜底导航到同源 /logout.jsp', async () => {
+    const config = {
+      logoutTrigger: { kind: 'click', selector: '#logout' },
+      loggedOutUrlPattern: 'https://oa.example.com/login*',
+    };
+    const driver = new FakeDriver('https://oa.example.com/sys/profile/index.jsp');
+    driver.redirects.set('https://oa.example.com/logout.jsp', 'https://oa.example.com/login.jsp');
     const adapter = new LandrayAdapter(config);
-    await expect(
-      adapter.logout(makeContext(new FakeDriver(), config, { logoutTriggerMs: 0 })),
-    ).rejects.toMatchObject({ code: 'E_LOGOUT_TRIGGER_FAILED' });
+
+    await adapter.logout(makeContext(driver, config));
+
+    expect(driver.navigations).toEqual(['https://oa.example.com/logout.jsp']);
+    expect(driver.clicks).toEqual([]);
   });
 
   it('触发成功但无登出证据时抛出 E_LOGOUT_TIMEOUT', async () => {
